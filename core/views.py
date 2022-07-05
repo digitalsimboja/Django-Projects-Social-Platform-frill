@@ -1,4 +1,5 @@
 from distutils.log import info
+from multiprocessing import context
 from django.shortcuts import render, redirect
 from django.contrib.auth.models import User, auth
 from django.contrib import messages
@@ -47,7 +48,7 @@ def index(request):
         username_profile.append(users.id)
 
     for ids in username_profile:
-        profile_lists = Profile.objects.filter(id_users=ids)
+        profile_lists = Profile.objects.filter(id_user=ids)
         username_profile_list.append(profile_lists)
 
     suggestions_username_profile_list = list(chain(username_profile_list))
@@ -118,6 +119,83 @@ def follow(request):
         
     else:
         return redirect('/')
+
+@login_required(login_url='signin')
+def like_post(request):
+    username = request.user.username
+    post_id = request.GET.get('post_id')
+
+    post = Post.objects.get(id=post_id)
+
+    like_filter = LikePost.objects.filter(post_id=post_id, username=username).first()
+
+    if like_filter == None:
+        new_like = LikePost.objects.create(post_id=post_id, username=username)
+        new_like.save()
+        post.no_of_likes += 1
+
+        post.save()
+        return redirect('/')
+    else:
+        like_filter.delete()
+        post.no_of_likes -= 1
+        post.save()
+
+        return redirect('/')
+
+
+
+@login_required(login_url='signin')
+def search(request):
+    user_object = User.objects.get(username=request.user.username)
+    user_profile = Profile.objects.get(user=user_object)
+
+    if request.method == 'POST':
+        username = request.POST['username']
+        username_object = User.objects.filter(username__icontains=username)
+
+        username_profile = []
+        username_profile_list = []
+
+        for users in username_object:
+            username_profile.append(users.id)
+        
+        for ids in username_profile:
+            profile_lists = Profile.objects.filter(id_user=ids)
+            username_profile_list.append(profile_lists)
+        
+        username_profile_list = list(chain(*username_profile_list))
+    return render(request, 'search.html', {'user_profile': user_profile, 'username_profile_list': username_profile_list})
+
+@login_required(login_url='signin')
+def profile(request, pk):
+    user_object = User.objects.get(username=pk)
+    user_profile = Profile.objects.get(user=user_object)
+    user_posts = Post.objects.get(user=pk)
+    user_post_length = len(user_posts)
+
+    follower = request.user.username
+    user = pk
+
+    if FollowersCount.objects.filter(follower=follower, user=user).first():
+        button_text = 'Unfollow'
+    else:
+        button_text = 'Follow'
+    
+    user_followers = len(FollowersCount.objects.filter(user=pk))
+    user_following = len(FollowersCount.objects.filter(follower=pk))
+
+    context = {
+        'user_object': user_object,
+        'user_profile': user_profile,
+        'user_posts': user_posts,
+        'user_post_length': user_post_length,
+        'button_text': button_text,
+        'user_followers': user_followers,
+        'user_following': user_following,
+    }
+
+    return render(request, 'profile.html', context)
 
 def signup(request):
 
